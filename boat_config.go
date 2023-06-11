@@ -13,7 +13,7 @@ import (
 )
 
 type Config struct {
-	Motors   []motorConfig
+	Motors   []MotorConfig
 	LengthMM float64 `json:"length_mm"`
 	WidthMM  float64 `json:"width_mm"`
 	IMU      string

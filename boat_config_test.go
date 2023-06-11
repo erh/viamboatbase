@@ -7,7 +7,7 @@ import (
 	"go.viam.com/test"
 )
 
-var testMotorConfig = []motorConfig{
+var testMotorConfig = []MotorConfig{
 	{Name: "starboard-rotation", XOffsetMM: 300, YOffsetMM: 0, AngleDegrees: 0, Weight: 1},
 	{Name: "port-rotation", XOffsetMM: -300, YOffsetMM: 0, AngleDegrees: 0, Weight: 1},
 	{Name: "forward", XOffsetMM: 0, YOffsetMM: -300, AngleDegrees: 0, Weight: 1},

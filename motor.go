@@ -18,7 +18,7 @@ func (mw *motorWeights) diff(other motorWeights) float64 {
 		math.Pow(mw.angular-other.angular, 2))
 }
 
-type motorConfig struct {
+type MotorConfig struct {
 	Name         string
 	XOffsetMM    float64 `json:"x_offset_mm"`
 	YOffsetMM    float64 `json:"y_offset_mm"`
@@ -28,7 +28,7 @@ type motorConfig struct {
 
 // percentDistanceFromCenterOfMass: if the boat is a circle with a radius of 5m,
 // this is the distance from center in m / 5m.
-func (mc *motorConfig) computeWeights(radius float64) motorWeights {
+func (mc *MotorConfig) computeWeights(radius float64) motorWeights {
 	x := math.Sin(utils.DegToRad(mc.AngleDegrees)) * mc.Weight
 	y := math.Cos(utils.DegToRad(mc.AngleDegrees)) * mc.Weight
 

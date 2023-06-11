@@ -12,13 +12,13 @@ const testTheta = .01
 
 func TestMotorWeights(t *testing.T) {
 	type d struct {
-		cfg motorConfig
+		cfg MotorConfig
 		res motorWeights
 	}
 
 	tests := []d{
 		{
-			motorConfig{
+			MotorConfig{
 				XOffsetMM:    0,
 				YOffsetMM:    -10,
 				AngleDegrees: 0,
@@ -27,7 +27,7 @@ func TestMotorWeights(t *testing.T) {
 			motorWeights{0, 1, 0},
 		},
 		{
-			motorConfig{
+			MotorConfig{
 				XOffsetMM:    0,
 				YOffsetMM:    -10,
 				AngleDegrees: 180,
@@ -36,14 +36,14 @@ func TestMotorWeights(t *testing.T) {
 			motorWeights{0, -1, 0},
 		},
 		{
-			motorConfig{
+			MotorConfig{
 				AngleDegrees: 45,
 				Weight:       math.Sqrt(2),
 			},
 			motorWeights{1, 1, 0},
 		},
 		{
-			motorConfig{
+			MotorConfig{
 				XOffsetMM:    -10,
 				YOffsetMM:    -10,
 				AngleDegrees: 45,
@@ -53,14 +53,14 @@ func TestMotorWeights(t *testing.T) {
 		},
 
 		{
-			motorConfig{
+			MotorConfig{
 				AngleDegrees: 1, // this should be almost entirely linearY
 				Weight:       1,
 			},
 			motorWeights{.017, .99, 0},
 		},
 		{
-			motorConfig{
+			MotorConfig{
 				XOffsetMM:    0,
 				YOffsetMM:    -10,
 				AngleDegrees: 90,
