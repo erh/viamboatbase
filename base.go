@@ -23,7 +23,7 @@ import (
 var Model = resource.DefaultModelFamily.WithModel("boat")
 
 func init() {
-	boatComp := resource.Registration[base.Base, *boatConfig]{
+	boatComp := resource.Registration[base.Base, *Config]{
 		Constructor: func(
 			ctx context.Context, deps resource.Dependencies, conf resource.Config, logger golog.Logger,
 		) (base.Base, error) {
@@ -34,17 +34,9 @@ func init() {
 }
 
 func createBoat(deps resource.Dependencies, conf resource.Config, logger golog.Logger) (base.LocalBase, error) {
-	newConf, err := resource.NativeConfig[*boatConfig](conf)
+	newConf, err := resource.NativeConfig[*Config](conf)
 	if err != nil {
 		return nil, err
-	}
-
-	if newConf.WidthMM <= 0 {
-		return nil, errors.New("width has to be > 0")
-	}
-
-	if newConf.LengthMM <= 0 {
-		return nil, errors.New("length has to be > 0")
 	}
 
 	theBoat := &boat{
@@ -84,7 +76,7 @@ type boat struct {
 	resource.Named
 	resource.AlwaysRebuild
 
-	cfg    *boatConfig
+	cfg    *Config
 	motors []motor.Motor
 	imu    movementsensor.MovementSensor
 

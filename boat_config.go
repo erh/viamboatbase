@@ -9,21 +9,42 @@ import (
 	"go.uber.org/multierr"
 	"gonum.org/v1/gonum/mat"
 
-	"go.viam.com/rdk/resource"
+	"go.viam.com/utils"
 )
 
-type boatConfig struct {
-	resource.TriviallyValidateConfig
+type Config struct {
 	Motors   []motorConfig
 	LengthMM float64 `json:"length_mm"`
 	WidthMM  float64 `json:"width_mm"`
 	IMU      string
 }
 
-func (bc *boatConfig) maxWeights() motorWeights {
+func (cfg *Config) Validate(path string) ([]string, error) {
+	if cfg.WidthMM <= 0 {
+		return nil, utils.NewConfigValidationFieldRequiredError(path, "width_mm")
+	}
+
+	if cfg.LengthMM <= 0 {
+		return nil, utils.NewConfigValidationFieldRequiredError(path, "length_mm")
+	}
+
+	var deps []string
+
+	if cfg.IMU != "" {
+		deps = append(deps, cfg.IMU)
+	}
+
+	for _, m := range cfg.Motors {
+		deps = append(deps, m.Name)
+	}
+
+	return deps, nil
+}
+
+func (cfg *Config) maxWeights() motorWeights {
 	var max motorWeights
-	for _, mc := range bc.Motors {
-		w := mc.computeWeights(math.Hypot(bc.WidthMM, bc.LengthMM))
+	for _, mc := range cfg.Motors {
+		w := mc.computeWeights(math.Hypot(cfg.WidthMM, cfg.LengthMM))
 		max.linearX += math.Abs(w.linearX)
 		max.linearY += math.Abs(w.linearY)
 		max.angular += math.Abs(w.angular)
@@ -51,8 +72,8 @@ func goalScale(currentVal, otherVal, currentGoal, otherGoal float64) float64 {
 	return currentVal
 }
 
-func (bc *boatConfig) computeGoal(linear, angular r3.Vector) motorWeights {
-	w := bc.maxWeights()
+func (cfg *Config) computeGoal(linear, angular r3.Vector) motorWeights {
+	w := cfg.maxWeights()
 	w.linearX *= linear.X
 	w.linearY *= linear.Y
 	w.angular *= angular.Z
@@ -65,19 +86,19 @@ func (bc *boatConfig) computeGoal(linear, angular r3.Vector) motorWeights {
 	return w
 }
 
-func (bc *boatConfig) weights() []motorWeights {
-	res := make([]motorWeights, len(bc.Motors))
-	for idx, mc := range bc.Motors {
-		w := mc.computeWeights(math.Hypot(bc.WidthMM, bc.LengthMM))
+func (cfg *Config) weights() []motorWeights {
+	res := make([]motorWeights, len(cfg.Motors))
+	for idx, mc := range cfg.Motors {
+		w := mc.computeWeights(math.Hypot(cfg.WidthMM, cfg.LengthMM))
 		res[idx] = w
 	}
 	return res
 }
 
-func (bc *boatConfig) weightsAsMatrix() *mat.Dense {
-	m := mat.NewDense(3, len(bc.Motors), nil)
+func (cfg *Config) weightsAsMatrix() *mat.Dense {
+	m := mat.NewDense(3, len(cfg.Motors), nil)
 
-	for idx, w := range bc.weights() {
+	for idx, w := range cfg.weights() {
 		m.Set(0, idx, w.linearX)
 		m.Set(1, idx, w.linearY)
 		m.Set(2, idx, w.angular)
@@ -86,19 +107,19 @@ func (bc *boatConfig) weightsAsMatrix() *mat.Dense {
 	return m
 }
 
-func (bc *boatConfig) computePowerOutputAsMatrix(powers []float64) mat.Dense {
-	if len(powers) != len(bc.Motors) {
-		panic(fmt.Errorf("powers wrong length got: %d should be: %d", len(powers), len(bc.Motors)))
+func (cfg *Config) computePowerOutputAsMatrix(powers []float64) mat.Dense {
+	if len(powers) != len(cfg.Motors) {
+		panic(fmt.Errorf("powers wrong length got: %d should be: %d", len(powers), len(cfg.Motors)))
 	}
 	var out mat.Dense
 
-	out.Mul(bc.weightsAsMatrix(), mat.NewDense(len(powers), 1, powers))
+	out.Mul(cfg.weightsAsMatrix(), mat.NewDense(len(powers), 1, powers))
 
 	return out
 }
 
-func (bc *boatConfig) computePowerOutput(powers []float64) motorWeights {
-	out := bc.computePowerOutputAsMatrix(powers)
+func (cfg *Config) computePowerOutput(powers []float64) motorWeights {
+	out := cfg.computePowerOutputAsMatrix(powers)
 
 	return motorWeights{
 		linearX: out.At(0, 0),
@@ -115,8 +136,8 @@ func (bc *boatConfig) computePowerOutput(powers []float64) motorWeights {
 // angularPercent: -1 -> 1 percent of power you want applied to move angularly
 //
 //	note only z is relevant here
-func (bc *boatConfig) computePower(linear, angular r3.Vector) ([]float64, error) {
-	goal := bc.computeGoal(linear, angular)
+func (cfg *Config) computePower(linear, angular r3.Vector) ([]float64, error) {
+	goal := cfg.computeGoal(linear, angular)
 	opt, err := nlopt.NewNLopt(nlopt.GN_DIRECT, 6)
 	if err != nil {
 		return nil, err
@@ -126,7 +147,7 @@ func (bc *boatConfig) computePower(linear, angular r3.Vector) ([]float64, error)
 	mins := []float64{}
 	maxs := []float64{}
 
-	for range bc.Motors {
+	for range cfg.Motors {
 		mins = append(mins, -1)
 		maxs = append(maxs, 1)
 	}
@@ -143,7 +164,7 @@ func (bc *boatConfig) computePower(linear, angular r3.Vector) ([]float64, error)
 	}
 
 	myfunc := func(x, gradient []float64) float64 {
-		total := bc.computePowerOutput(x)
+		total := cfg.computePowerOutput(x)
 		return total.diff(goal)
 	}
 

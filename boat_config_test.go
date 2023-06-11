@@ -17,7 +17,7 @@ var testMotorConfig = []motorConfig{
 }
 
 func TestBoatConfig(t *testing.T) {
-	cfg := boatConfig{
+	cfg := Config{
 		Motors:   testMotorConfig,
 		LengthMM: 500,
 		WidthMM:  500,
@@ -164,7 +164,7 @@ func weightsAlmostEqual(actual interface{}, expected ...interface{}) string {
 }
 
 func BenchmarkComputePower(b *testing.B) {
-	cfg := boatConfig{
+	cfg := Config{
 		Motors:   testMotorConfig,
 		LengthMM: 500,
 		WidthMM:  500,
