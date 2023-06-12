@@ -28,7 +28,7 @@ func realMain() error {
 	if err != nil {
 		return err
 	}
-	
+
 	conf.Network.BindAddress = "0.0.0.0:8082"
 	if err := conf.Network.Validate(""); err != nil {
 		return err

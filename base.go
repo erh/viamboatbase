@@ -18,6 +18,7 @@ import (
 	"go.viam.com/rdk/operation"
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/spatialmath"
+	rdkutils "go.viam.com/rdk/utils"
 )
 
 var Model = resource.DefaultModelFamily.WithModel("boat")
@@ -63,13 +64,24 @@ func createBoat(deps resource.Dependencies, conf resource.Config, logger golog.L
 	return theBoat, nil
 }
 
+type controlMode int
+
+const (
+	controlNone     controlMode = 0
+	controlVelocity             = 1
+	controlHeading              = 2
+)
+
 type boatState struct {
-	threadStarted      bool
-	velocityControlled bool
+	threadStarted bool
+	controlState  controlMode
 
 	lastPower                               []float64
 	lastPowerLinear, lastPowerAngular       r3.Vector
 	velocityLinearGoal, velocityAngularGoal r3.Vector
+
+	compassGoal  float64
+	spinVelocity float64
 }
 
 type boat struct {
@@ -106,16 +118,52 @@ func (b *boat) MoveStraight(ctx context.Context, distanceMm int, mmPerSec float6
 }
 
 func (b *boat) Spin(ctx context.Context, angleDeg, degsPerSec float64, extra map[string]interface{}) error {
-	millis := 1000 * (angleDeg / degsPerSec)
-	err := b.SetVelocity(ctx, r3.Vector{}, r3.Vector{Z: -1 * degsPerSec}, extra)
+	if b.movementSensor == nil {
+		return errors.New("no movementSensor")
+	}
+
+	compass, err := b.movementSensor.CompassHeading(ctx, nil)
 	if err != nil {
 		return err
 	}
-	utils.SelectContextOrWait(ctx, time.Duration(float64(time.Millisecond)*millis))
-	return b.Stop(ctx, nil)
+
+	goal := compass + angleDeg
+
+	b.logger.Infof("Spin angleDeg: %v degsPerSec: %v compass: %v goal: %v", angleDeg, degsPerSec, compass, goal)
+	_, done := b.opMgr.New(ctx)
+	defer done()
+
+	b.stateMutex.Lock()
+
+	b.state.controlState = controlHeading
+	b.state.compassGoal = goal
+	b.state.velocityLinearGoal = r3.Vector{}
+	b.state.spinVelocity = degsPerSec
+	b.state.velocityAngularGoal = r3.Vector{0, 0, 0}
+
+	err = b.startVelocityThreadInLock()
+
+	b.stateMutex.Unlock()
+
+	if err != nil {
+		return err
+	}
+
+	return b.opMgr.WaitForSuccess(ctx, time.Second, func(ctx context.Context) (bool, error) {
+		compass, err := b.movementSensor.CompassHeading(ctx, nil)
+		if err != nil {
+			return false, err
+		}
+
+		return rdkutils.AngleDiffDeg(goal, compass) < 1, nil
+	})
 }
 
-func (b *boat) startVelocityThread() error {
+func (b *boat) startVelocityThreadInLock() error {
+	if b.state.threadStarted {
+		return nil
+	}
+
 	if b.movementSensor == nil {
 		return errors.New("no movementSensor")
 	}
@@ -138,27 +186,57 @@ func (b *boat) startVelocityThread() error {
 			}
 		}
 	}()
-
+	b.state.threadStarted = true
 	return nil
 }
 
 func (b *boat) velocityThreadLoop(ctx context.Context) error {
+	// TODO(erh) optimize how e get all sensor stuff
+
 	av, err := b.movementSensor.AngularVelocity(ctx, make(map[string]interface{}))
 	if err != nil {
 		return err
 	}
 
-	b.stateMutex.Lock()
+	heading, err := b.movementSensor.CompassHeading(ctx, nil)
+	if err != nil {
+		return err
+	}
 
-	if !b.state.velocityControlled {
+	b.stateMutex.Lock()
+	if b.state.controlState == controlNone {
 		b.stateMutex.Unlock()
 		return nil
 	}
 
-	linear, angular := computeNextPower(&b.state, av, b.logger)
+	var linear, angular r3.Vector
+
+	if b.state.controlState == controlVelocity {
+		linear, angular = computeNextPower(&b.state, av, b.logger)
+	} else if b.state.controlState == controlHeading {
+		updateVelocityGoalForHeading(&b.state, heading)
+		b.logger.Infof("heading control compass: %v goal: %v angular z: %v", heading, b.state.compassGoal, b.state.velocityAngularGoal.Z)
+		linear, angular = computeNextPower(&b.state, av, b.logger)
+	}
 
 	b.stateMutex.Unlock()
+
 	return b.setPowerInternal(ctx, linear, angular)
+}
+
+func updateVelocityGoalForHeading(state *boatState, heading float64) {
+	diff := heading - state.compassGoal
+	if diff < -5 {
+		state.velocityAngularGoal.Z = -1 * state.spinVelocity
+	} else if diff > 5 {
+		state.velocityAngularGoal.Z = state.spinVelocity
+	} else if diff < -1 {
+		state.velocityAngularGoal.Z = (diff * -1 / 5) * state.spinVelocity
+	} else if diff > 1 {
+		state.velocityAngularGoal.Z = (diff / 5) * state.spinVelocity
+	} else {
+		state.velocityAngularGoal.Z = 0
+	}
 }
 
 func computeNextPower(state *boatState, angularVelocity spatialmath.AngularVelocity, logger golog.Logger) (r3.Vector, r3.Vector) {
@@ -205,19 +283,16 @@ func (b *boat) SetVelocity(ctx context.Context, linear, angular r3.Vector, extra
 	defer done()
 
 	b.stateMutex.Lock()
+	defer b.stateMutex.Unlock()
 
-	if !b.state.threadStarted {
-		err := b.startVelocityThread()
-		if err != nil {
-			return err
-		}
-		b.state.threadStarted = true
+	err := b.startVelocityThreadInLock()
+	if err != nil {
+		return err
 	}
 
-	b.state.velocityControlled = true
+	b.state.controlState = controlVelocity
 	b.state.velocityLinearGoal = linear
 	b.state.velocityAngularGoal = angular
-	b.stateMutex.Unlock()
 
 	return nil
 }
@@ -228,7 +303,7 @@ func (b *boat) SetPower(ctx context.Context, linear, angular r3.Vector, extra ma
 	defer done()
 
 	b.stateMutex.Lock()
-	b.state.velocityControlled = false
+	b.state.controlState = controlNone
 	b.stateMutex.Unlock()
 
 	return b.setPowerInternal(ctx, linear, angular)
