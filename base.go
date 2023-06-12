@@ -235,7 +235,7 @@ func (b *boat) SetPower(ctx context.Context, linear, angular r3.Vector, extra ma
 }
 
 func (b *boat) setPowerInternal(ctx context.Context, linear, angular r3.Vector) error {
-	power, err := b.cfg.computePower(linear, angular)
+	power, err := b.cfg.ComputePower(linear, angular)
 	if err != nil {
 		return err
 	}

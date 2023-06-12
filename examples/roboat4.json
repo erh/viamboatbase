@@ -1,0 +1,20 @@
+{
+    "motors" : [
+        {
+            "name" : "port",
+            "x_offset_mm" : -200,
+            "y_offset_mm" : -1500,
+            "weight" : 1
+        },
+        {
+            "name" : "starboard",
+            "x_offset_mm" : 200,
+            "y_offset_mm" : -1500,
+            "weight" : 1
+        }
+        
+    ],
+    "length_mm" : 3048,
+    "width_mm" : 1100,
+    "movement_sensor" : "foo"
+}

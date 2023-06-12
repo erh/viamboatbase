@@ -107,7 +107,7 @@ func (cfg *Config) weightsAsMatrix() *mat.Dense {
 	return m
 }
 
-func (cfg *Config) computePowerOutputAsMatrix(powers []float64) mat.Dense {
+func (cfg *Config) ComputePowerOutputAsMatrix(powers []float64) mat.Dense {
 	if len(powers) != len(cfg.Motors) {
 		panic(fmt.Errorf("powers wrong length got: %d should be: %d", len(powers), len(cfg.Motors)))
 	}
@@ -118,8 +118,8 @@ func (cfg *Config) computePowerOutputAsMatrix(powers []float64) mat.Dense {
 	return out
 }
 
-func (cfg *Config) computePowerOutput(powers []float64) motorWeights {
-	out := cfg.computePowerOutputAsMatrix(powers)
+func (cfg *Config) ComputePowerOutput(powers []float64) motorWeights {
+	out := cfg.ComputePowerOutputAsMatrix(powers)
 
 	return motorWeights{
 		linearX: out.At(0, 0),
@@ -136,9 +136,10 @@ func (cfg *Config) computePowerOutput(powers []float64) motorWeights {
 // angularPercent: -1 -> 1 percent of power you want applied to move angularly
 //
 //	note only z is relevant here
-func (cfg *Config) computePower(linear, angular r3.Vector) ([]float64, error) {
+func (cfg *Config) ComputePower(linear, angular r3.Vector) ([]float64, error) {
 	goal := cfg.computeGoal(linear, angular)
-	opt, err := nlopt.NewNLopt(nlopt.GN_DIRECT, 6)
+	numMotrs := uint(len(cfg.Motors))
+	opt, err := nlopt.NewNLopt(nlopt.GN_DIRECT, numMotrs)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +165,7 @@ func (cfg *Config) computePower(linear, angular r3.Vector) ([]float64, error) {
 	}
 
 	myfunc := func(x, gradient []float64) float64 {
-		total := cfg.computePowerOutput(x)
+		total := cfg.ComputePowerOutput(x)
 		return total.diff(goal)
 	}
 
@@ -172,7 +173,7 @@ func (cfg *Config) computePower(linear, angular r3.Vector) ([]float64, error) {
 	if err != nil {
 		return nil, err
 	}
-	powers, _, err := opt.Optimize(make([]float64, 6))
+	powers, _, err := opt.Optimize(make([]float64, numMotrs))
 	if err != nil {
 		return nil, err
 	}
