@@ -53,9 +53,9 @@ func createBoat(deps resource.Dependencies, conf resource.Config, logger golog.L
 		theBoat.motors = append(theBoat.motors, m)
 	}
 
-	if newConf.IMU != "" {
+	if newConf.MovementSensor != "" {
 		var err error
-		theBoat.imu, err = movementsensor.FromDependencies(deps, newConf.IMU)
+		theBoat.movementSensor, err = movementsensor.FromDependencies(deps, newConf.MovementSensor)
 		if err != nil {
 			return nil, err
 		}
@@ -76,9 +76,9 @@ type boat struct {
 	resource.Named
 	resource.AlwaysRebuild
 
-	cfg    *Config
-	motors []motor.Motor
-	imu    movementsensor.MovementSensor
+	cfg            *Config
+	motors         []motor.Motor
+	movementSensor movementsensor.MovementSensor
 
 	opMgr operation.SingleOperationManager
 
@@ -116,8 +116,8 @@ func (b *boat) Spin(ctx context.Context, angleDeg, degsPerSec float64, extra map
 }
 
 func (b *boat) startVelocityThread() error {
-	if b.imu == nil {
-		return errors.New("no imu")
+	if b.movementSensor == nil {
+		return errors.New("no movementSensor")
 	}
 
 	var ctx context.Context
@@ -143,7 +143,7 @@ func (b *boat) startVelocityThread() error {
 }
 
 func (b *boat) velocityThreadLoop(ctx context.Context) error {
-	av, err := b.imu.AngularVelocity(ctx, make(map[string]interface{}))
+	av, err := b.movementSensor.AngularVelocity(ctx, make(map[string]interface{}))
 	if err != nil {
 		return err
 	}

@@ -13,10 +13,10 @@ import (
 )
 
 type Config struct {
-	Motors   []MotorConfig
-	LengthMM float64 `json:"length_mm"`
-	WidthMM  float64 `json:"width_mm"`
-	IMU      string
+	Motors         []MotorConfig
+	LengthMM       float64 `json:"length_mm"`
+	WidthMM        float64 `json:"width_mm"`
+	MovementSensor string  `json:"movement_sensor"`
 }
 
 func (cfg *Config) Validate(path string) ([]string, error) {
@@ -30,8 +30,8 @@ func (cfg *Config) Validate(path string) ([]string, error) {
 
 	var deps []string
 
-	if cfg.IMU != "" {
-		deps = append(deps, cfg.IMU)
+	if cfg.MovementSensor != "" {
+		deps = append(deps, cfg.MovementSensor)
 	}
 
 	for _, m := range cfg.Motors {
