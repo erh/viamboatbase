@@ -23,6 +23,8 @@ import (
 
 var Model = resource.DefaultModelFamily.WithModel("boat")
 
+const pidLoopTime = time.Millisecond * 500
+
 func init() {
 	boatComp := resource.Registration[base.Base, *Config]{
 		Constructor: func(
@@ -45,6 +47,9 @@ func createBoat(deps resource.Dependencies, conf resource.Config, logger golog.L
 		cfg:    newConf,
 		logger: logger,
 	}
+
+	theBoat.state.angularPID.setDefaults()
+	theBoat.state.linearPID.setDefaults()
 
 	for _, mc := range newConf.Motors {
 		m, err := motor.FromDependencies(deps, mc.Name)
@@ -76,8 +81,7 @@ type boatState struct {
 	threadStarted bool
 	controlState  controlMode
 
-	lastPower                               []float64
-	lastPowerLinear, lastPowerAngular       r3.Vector
+	angularPID, linearPID                   pidState
 	velocityLinearGoal, velocityAngularGoal r3.Vector
 
 	compassGoal  float64
@@ -176,7 +180,7 @@ func (b *boat) startVelocityThreadInLock() error {
 		defer b.waitGroup.Done()
 
 		for {
-			utils.SelectContextOrWait(ctx, time.Millisecond*500)
+			utils.SelectContextOrWait(ctx, pidLoopTime)
 			err := b.velocityThreadLoop(ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {
@@ -191,9 +195,14 @@ func (b *boat) startVelocityThreadInLock() error {
 }
 
 func (b *boat) velocityThreadLoop(ctx context.Context) error {
-	// TODO(erh) optimize how e get all sensor stuff
+	// TODO(erh) optimize how we get all sensor stuff
 
 	av, err := b.movementSensor.AngularVelocity(ctx, make(map[string]interface{}))
+	if err != nil {
+		return err
+	}
+
+	lv, err := b.movementSensor.LinearVelocity(ctx, make(map[string]interface{}))
 	if err != nil {
 		return err
 	}
@@ -202,6 +211,8 @@ func (b *boat) velocityThreadLoop(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// ------
 
 	b.stateMutex.Lock()
 	if b.state.controlState == controlNone {
@@ -212,11 +223,11 @@ func (b *boat) velocityThreadLoop(ctx context.Context) error {
 	var linear, angular r3.Vector
 
 	if b.state.controlState == controlVelocity {
-		linear, angular = computeNextPower(&b.state, av, b.logger)
+		linear, angular = computeNextPower(&b.state, lv, av, b.logger)
 	} else if b.state.controlState == controlHeading {
 		updateVelocityGoalForHeading(&b.state, heading)
 		b.logger.Infof("heading control compass: %v goal: %v angular z: %v", heading, b.state.compassGoal, b.state.velocityAngularGoal.Z)
-		linear, angular = computeNextPower(&b.state, av, b.logger)
+		linear, angular = computeNextPower(&b.state, lv, av, b.logger)
 	}
 
 	b.stateMutex.Unlock()
@@ -239,42 +250,14 @@ func updateVelocityGoalForHeading(state *boatState, heading float64) {
 	}
 }
 
-func computeNextPower(state *boatState, angularVelocity spatialmath.AngularVelocity, logger golog.Logger) (r3.Vector, r3.Vector) {
-	linear := state.lastPowerLinear
-	angular := state.lastPowerAngular
+func computeNextPower(
+	state *boatState,
+	linearVelocity r3.Vector,
+	angularVelocity spatialmath.AngularVelocity,
+	logger golog.Logger) (r3.Vector, r3.Vector) {
 
-	angularDiff := angularVelocity.Z - state.velocityAngularGoal.Z
-
-	if math.Abs(angularDiff) > 1 {
-		delta := angularDiff / 360
-		for math.Abs(delta) < .01 {
-			delta *= 2
-		}
-
-		angular.Z -= delta * 10
-		angular.Z = math.Max(-1, angular.Z)
-		angular.Z = math.Min(1, angular.Z)
-	}
-
-	linear.Y = state.velocityLinearGoal.Y // TEMP
-	linear.X = state.velocityLinearGoal.X // TEMP
-
-	if logger != nil && true {
-		logger.Debugf(
-			"computeNextPower last: %0.2f %0.2f %0.2f goal v: %0.2f %0.2f %0.2f av: %0.2f"+
-				" -> %0.2f %0.2f %0.2f",
-			state.lastPowerLinear.X,
-			state.lastPowerLinear.Y,
-			state.lastPowerAngular.Z,
-			state.velocityLinearGoal.X,
-			state.velocityLinearGoal.Y,
-			state.velocityAngularGoal.Z,
-			angularVelocity.Z,
-			linear.X, linear.Y, angular.Z,
-		)
-	}
-
-	return linear, angular
+	return r3.Vector{0, state.linearPID.Control(state.velocityLinearGoal.Y, linearVelocity.Y, pidLoopTime), 0},
+		r3.Vector{0, 0, state.angularPID.Control(state.velocityAngularGoal.Z, angularVelocity.Z, pidLoopTime)}
 }
 
 func (b *boat) SetVelocity(ctx context.Context, linear, angular r3.Vector, extra map[string]interface{}) error {
@@ -324,12 +307,6 @@ func (b *boat) setPowerInternal(ctx context.Context, linear, angular r3.Vector) 
 			return ctx.Err()
 		}
 	}
-
-	b.stateMutex.Lock()
-	b.state.lastPower = power
-	b.state.lastPowerLinear = linear
-	b.state.lastPowerAngular = angular
-	b.stateMutex.Unlock()
 
 	return nil
 }

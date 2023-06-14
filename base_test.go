@@ -10,42 +10,17 @@ import (
 )
 
 func TestComputeNextPower(t *testing.T) {
+	state := &boatState{
+		velocityAngularGoal: r3.Vector{Z: 5},
+	}
+	state.angularPID.setDefaults()
+	state.linearPID.setDefaults()
+
 	_, a := computeNextPower(
-		&boatState{
-			velocityAngularGoal: r3.Vector{Z: 10},
-		},
+		state,
+		r3.Vector{},
 		spatialmath.AngularVelocity{},
 		nil,
 	)
-	test.That(t, a.Z, test.ShouldAlmostEqual, .2777777, .01)
-
-	_, a = computeNextPower(
-		&boatState{
-			velocityAngularGoal: r3.Vector{Z: -10},
-		},
-		spatialmath.AngularVelocity{},
-		nil,
-	)
-	test.That(t, a.Z, test.ShouldAlmostEqual, -.2777777, .01)
-
-	_, a2 := computeNextPower(
-		&boatState{
-			lastPowerAngular:    r3.Vector{Z: .3},
-			velocityAngularGoal: r3.Vector{Z: 45},
-		},
-		spatialmath.AngularVelocity{Z: 30},
-		nil,
-	)
-	test.That(t, a2.Z, test.ShouldBeGreaterThan, a.Z)
-	test.That(t, a2.Z, test.ShouldBeGreaterThan, .3)
-
-	_, a = computeNextPower(
-		&boatState{
-			lastPowerAngular:    r3.Vector{Z: -.2},
-			velocityAngularGoal: r3.Vector{Z: 45},
-		},
-		spatialmath.AngularVelocity{Z: -30},
-		nil,
-	)
-	test.That(t, a.Z, test.ShouldBeGreaterThan, 0)
+	test.That(t, a.Z, test.ShouldAlmostEqual, .588, .01)
 }
