@@ -1,0 +1,13 @@
+{
+  "module_id": "erh:viamboatbase",
+  "visibility": "public",
+  "url": "https://github.com/erh/viamboatbase",
+  "description": "a module for controlling a boat with a bunch of motors as a base",
+  "models": [
+    {
+        "api": "rdk:component:base",
+        "model": "erh:base:boat"
+    }
+  ],
+  "entrypoint": "viamboatbase"
+}

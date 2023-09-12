@@ -21,7 +21,7 @@ import (
 	rdkutils "go.viam.com/rdk/utils"
 )
 
-var Model = resource.DefaultModelFamily.WithModel("boat")
+var Model = resource.ModelNamespace("erh").WithFamily("base").WithModel("boat")
 
 const pidLoopTime = time.Millisecond * 500
 
