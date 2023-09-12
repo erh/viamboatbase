@@ -9,7 +9,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install dependencies
-      run: sudo apt-get install -y nlopt
+      run: sudo apt-get install -y libnlopt-dev
     - name: build
       run: make module
     - uses: viamrobotics/upload-module@main
