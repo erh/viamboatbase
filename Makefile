@@ -7,3 +7,6 @@ test:
 
 lint:
 	gofmt -w -s .
+
+module: viamboatbase
+	tar czf module.tgz viamboatbase
