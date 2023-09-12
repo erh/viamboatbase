@@ -9,4 +9,4 @@ lint:
 	gofmt -w -s .
 
 module: viamboatbase
-	tar czf module.tgz viamboatbase
+	tar czf module.tar.gz viamboatbase
